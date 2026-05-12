@@ -1,0 +1,47 @@
+ <Modal
+                title={`Vẽ ghi chú retouch lên ảnh: ${currentEditingImage?.name}`}
+                open={isDrawModalVisible}
+                onCancel={() => setIsDrawModalVisible(false)}
+                footer={null}
+                width={750}
+                centered
+                destroyOnHidden
+                forceRender
+            >
+                <Layout style={{ backgroundColor: '#fff' }}>
+                    {/* Thanh công cụ vẽ bên trái */}
+                    <Layout.Sider width={120} style={{ backgroundColor: '#f0f2f5', padding: '15px', borderRadius: '8px', marginRight: '15px' }}>
+                        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                            <Text strong>Màu bút</Text>
+                            <Select defaultValue="red" style={{ width: '100%' }} onChange={changeColor}>
+                                <Option value="red"><span style={{ color: 'red' }}>●</span> Đỏ</Option>
+                                <Option value="blue"><span style={{ color: 'blue' }}>●</span> Xanh dương</Option>
+                                <Option value="green"><span style={{ color: 'green' }}>●</span> Xanh lá</Option>
+                                <Option value="yellow"><span style={{ color: 'yellow' }}>●</span> Vàng</Option>
+                            </Select>
+
+                            <Text strong>Cỡ bút</Text>
+                            <Select defaultValue={5} style={{ width: '100%' }} onChange={changeWidth}>
+                                <Option value={2}>Mảnh</Option>
+                                <Option value={5}>Vừa</Option>
+                                <Option value={10}>To</Option>
+                            </Select>
+
+                            <Divider />
+
+                            <Button icon={<UndoOutlined />} onClick={clearCanvas} style={{ width: '100%' }}>
+                                Xóa hết vẽ
+                            </Button>
+
+                            <Button type="primary" icon={<SaveOutlined />} onClick={saveDrawing} style={{ width: '100%', marginTop: '20px', height: '40px' }}>
+                                Lưu nét vẽ
+                            </Button>
+                        </Space>
+                    </Layout.Sider>
+
+                    {/* Vùng Canvas chứa ảnh */}
+                    <Layout.Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #d9d9d9', borderRadius: '8px' }}>
+                        <canvas ref={canvasRef} style={{ border: '1px solid #000' }} />
+                    </Layout.Content>
+                </Layout>
+            </Modal>
