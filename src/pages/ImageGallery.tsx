@@ -13,7 +13,7 @@ interface ImageGalleryProps {
 }
 
 // Custom wrapper để hiển thị Spin khi tải ảnh gốc trong Preview Modal
-const CustomImagePreview = ({ node }: { node: React.ReactElement<any> }) => {
+const CustomImagePreview = ({ node, onSrcChange }: { node: React.ReactElement<any>, onSrcChange?: (src: string) => void }) => {
     const [imgLoading, setImgLoading] = React.useState(true);
     const [showSpinner, setShowSpinner] = React.useState(false);
 
@@ -21,6 +21,7 @@ const CustomImagePreview = ({ node }: { node: React.ReactElement<any> }) => {
         let isCancelled = false;
 
         if (node.props.src) {
+            if (onSrcChange) onSrcChange(node.props.src);
             setImgLoading(true);
             setShowSpinner(false);
 
@@ -73,13 +74,132 @@ const CustomImagePreview = ({ node }: { node: React.ReactElement<any> }) => {
     );
 };
 
+const gridComponents = {
+    List: React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(({ style, children, ...props }, ref) => (
+        <div
+            ref={ref}
+            {...props}
+            style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                gap: '20px',
+                ...style,
+            }}
+        >
+            {children}
+        </div>
+    )),
+    Item: React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(({ children, ...rest }, ref) => (
+        <div ref={ref} {...rest} style={{ height: '100%', ...rest.style }}>
+            {children}
+        </div>
+    ))
+};
+
+const DraggablePanel = ({ imgId, selectedImages, handleSelectImage, imageComments, handleCommentChange }: any) => {
+    // Khởi tạo vị trí tịnh tiến (offset) là 0,0 để nó nằm đúng vị trí cũ
+    const [offset, setOffset] = React.useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = React.useState(false);
+    const dragStart = React.useRef({ x: 0, y: 0 });
+
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.closest('.ant-checkbox')) {
+            return;
+        }
+
+        setIsDragging(true);
+        // Lưu lại vị trí bắt đầu click chuột trừ đi offset hiện tại
+        dragStart.current = {
+            x: e.clientX - offset.x,
+            y: e.clientY - offset.y
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        e.stopPropagation();
+    };
+
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!isDragging) return;
+
+        const newX = e.clientX - dragStart.current.x;
+        const newY = e.clientY - dragStart.current.y;
+
+        setOffset({ x: newX, y: newY });
+        e.stopPropagation();
+    };
+
+    const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (isDragging) {
+            setIsDragging(false);
+            e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+    };
+
+    return (
+        <div
+            style={{
+                transform: `translate(${offset.x}px, ${offset.y}px)`,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '15px',
+                background: 'rgba(0,0,0,0.6)',
+                padding: '12px 20px',
+                borderRadius: '8px',
+                pointerEvents: 'auto',
+                width: 'min(90vw, 500px)',
+                zIndex: 9999,
+                cursor: isDragging ? 'grabbing' : 'grab',
+                userSelect: 'none',
+                touchAction: 'none'
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+        >
+            <Checkbox
+                checked={selectedImages.has(imgId)}
+                onChange={(e) => handleSelectImage(imgId, e.target.checked)}
+                style={{ color: 'white', whiteSpace: 'nowrap', marginTop: '5px' }}
+            >
+                Chọn ảnh này
+            </Checkbox>
+            <Input.TextArea
+                placeholder="Nhập nhận xét..."
+                value={imageComments[imgId] || ''}
+                onChange={(e) => handleCommentChange(imgId, e.target.value)}
+                autoSize={{ minRows: 2, maxRows: 4 }}
+                style={{ flex: 1, cursor: 'text' }}
+            />
+        </div>
+    );
+};
+
 const ImageGallery: React.FC<ImageGalleryProps> = ({ images, loading, onLoadMore }) => {
     // Lưu các id ảnh được chọn
     const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
     // Lưu nhận xét của từng ảnh, key là id ảnh
     const [imageComments, setImageComments] = useState<Record<string, string>>({});
+
+    // Quản lý trạng thái mở modal Preview và vị trí ảnh hiện tại
+    const [previewVisible, setPreviewVisible] = useState(false);
+    const [previewCurrent, setPreviewCurrent] = useState(0);
+
     // Mutation gửi API
     const { mutateAsync: chooseImg, isPending: isSubmitting } = useChooseImg();
+
+    const PUBLIC_URL = import.meta.env.VITE_API_URL_PUBLIC;
+
+    // Build mảng items cho PreviewGroup (chứa toàn bộ ảnh thay vì chỉ ảnh đang render ảo)
+    const previewItems = React.useMemo(() => {
+        return (images || []).map(img => ({
+            src: img.id ? `${PUBLIC_URL}/driver/proxy-image/${img.id}` : (img.url || img.thumbnail)
+        }));
+    }, [images, PUBLIC_URL]);
 
     const handleSelectImage = useCallback((id: string, checked: boolean) => {
         setSelectedImages(prev => {
@@ -138,10 +258,10 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, loading, onLoadMore
                 <Title level={3} style={{ margin: 0 }}>
                     Thư viện hình ảnh
                 </Title>
-                <Button 
-                    type="primary" 
+                <Button
+                    type="primary"
                     size="large"
-                    onClick={handleSubmit} 
+                    onClick={handleSubmit}
                     loading={isSubmitting}
                     disabled={selectedImages.size === 0}
                 >
@@ -149,7 +269,42 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, loading, onLoadMore
                 </Button>
             </div>
 
-            <Image.PreviewGroup preview={{ imageRender: (node) => <CustomImagePreview node={node} /> }}>
+            <Image.PreviewGroup
+                items={previewItems}
+                preview={{
+                    visible: previewVisible,
+                    current: previewCurrent,
+                    onVisibleChange: (vis) => setPreviewVisible(vis),
+                    onChange: (current) => {
+                        setPreviewCurrent(current);
+                        // Kích hoạt load tiếp nếu người dùng xem đến gần cuối danh sách (cách 3 ảnh)
+                        if (current >= images.length - 3 && onLoadMore) {
+                            onLoadMore();
+                        }
+                    },
+                    imageRender: (node) => <CustomImagePreview node={node} />,
+                    toolbarRender: (originalNode) => {
+                        // Sử dụng previewCurrent để lấy đúng ảnh đang xem (chính xác hơn nhiều so với việc parse src)
+                        const img = images[previewCurrent];
+                        if (!img) return originalNode;
+                        const imgId = img.id || img.url;
+
+
+                        return (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+                                <DraggablePanel
+                                    imgId={imgId}
+                                    selectedImages={selectedImages}
+                                    handleSelectImage={handleSelectImage}
+                                    imageComments={imageComments}
+                                    handleCommentChange={handleCommentChange}
+                                />
+                                {originalNode}
+                            </div>
+                        );
+                    }
+                }}
+            >
                 <VirtuosoGrid
                     useWindowScroll
                     data={images}
@@ -158,30 +313,7 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, loading, onLoadMore
                             onLoadMore();
                         }
                     }}
-                    components={{
-                        List: React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(({ style, children, ...props }, ref) => (
-                            <div
-                                ref={ref}
-                                {...props}
-                                style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
-                                    gap: '20px',
-                                    ...style,
-                                }}
-                            >
-                                {children}
-                            </div>
-                        )),
-                        Item: (props: React.ComponentProps<'div'>) => {
-                            const { children, ...rest } = props;
-                            return (
-                                <div {...rest} style={{ height: '100%', ...rest.style }}>
-                                    {children}
-                                </div>
-                            );
-                        }
-                    }}
+                    components={gridComponents}
                     itemContent={(index, img) => {
                         const imgId = img.id || img.url || index.toString();
                         return (
@@ -193,7 +325,7 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, loading, onLoadMore
                                 cover={
                                     <div style={{ position: 'relative', height: '320px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f0f0' }}>
                                         {/* Checkbox chọn ảnh */}
-                                        <Checkbox 
+                                        <Checkbox
                                             checked={selectedImages.has(imgId)}
                                             onChange={(e) => handleSelectImage(imgId, e.target.checked)}
                                             style={{
@@ -207,9 +339,17 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, loading, onLoadMore
                                         <Image
                                             alt={img.name || 'Image'}
                                             loading="lazy"
-                                            src={img.id ? `${import.meta.env.VITE_API_URL}/api/proxy-image/${img.id}` : (img.url || img.thumbnail)}
-                                            preview={{ src: img.id ? `${import.meta.env.VITE_API_URL}/api/proxy-image/${img.id}` : (img.url || img.thumbnail) }}
-                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            src={img.id ? `${PUBLIC_URL}/driver/proxy-image/${img.id}` : (img.url || img.thumbnail)}
+                                            preview={false} // Tắt preview mặc định, sẽ tự quản lý
+                                            onClick={() => {
+                                                setPreviewCurrent(index);
+                                                setPreviewVisible(true);
+                                                // Nếu mở ảnh ở vị trí gần cuối, gọi load thêm ngay lập tức để người dùng không bị kẹt ở nút Next
+                                                if (index >= images.length - 5 && onLoadMore) {
+                                                    onLoadMore();
+                                                }
+                                            }}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
                                             fallback="https://gw.alipayobjects.com/zos/antfincdn/ZHrcdLPrvN/empty.svg"
                                         />
                                     </div>
@@ -231,6 +371,15 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, loading, onLoadMore
                     }}
                 />
             </Image.PreviewGroup>
+
+            {/* Render các thẻ img ẩn để trình duyệt tải trước (preload) các ảnh tiếp theo vào cache */}
+            {previewVisible && (
+                <div style={{ display: 'none' }}>
+                    {previewItems.slice(previewCurrent + 1, previewCurrent + 4).map((item, i) => (
+                        <img key={i} src={item.src} alt="preload" />
+                    ))}
+                </div>
+            )}
         </div>
     );
 };

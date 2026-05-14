@@ -6,8 +6,7 @@ import { Form } from 'antd'
 import FormUpload from './pages/FormUpload'
 
 const App = () => {
-  const [count, setCount] = useState(0)
-  
+
   return (
     <FormUpload></FormUpload>
   )

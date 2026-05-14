@@ -36,7 +36,7 @@ const FormUpload: React.FC = () => {
 
         const ctrl = new AbortController();
 
-        fetchEventSource(`${import.meta.env.VITE_API_URL}/api/stream-images`, {
+        fetchEventSource(`${import.meta.env.VITE_API_URL_PUBLIC}/driver/stream-images`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
